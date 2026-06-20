@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f0f14">
+<title>WebShell — PWA Launcher</title>
+<style>
+  :root {
+    --bg:      #0f0f14;
+    --surface: #1a1a24;
+    --card:    #22222f;
+    --border:  #2e2e40;
+    --accent:  #6c63ff;
+    --accent2: #a78bfa;
+    --danger:  #ff5f6d;
+    --text:    #e8e8f0;
+    --muted:   #7878a0;
+    --green:   #34d399;
+    --font-ui: 'Inter', system-ui, sans-serif;
+    --radius:  14px;
+    --shadow:  0 8px 32px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
+
+  /* ── SCREENS ── */
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .screen.hidden { display: none !important; }
+
+  /* ── HOME SCREEN ── */
+  #homeScreen { background: var(--bg); }
+
+  .home-header {
+    padding: 52px 20px 16px;
+    background: linear-gradient(180deg, #13131f 0%, var(--bg) 100%);
+  }
+  .home-title { font-size: 13px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; color: var(--muted); }
+  .home-sub   { font-size: 26px; font-weight: 700; color: var(--text); margin-top: 4px; }
+
+  .search-bar {
+    margin: 0 16px 12px;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 50px; padding: 10px 16px;
+  }
+  .search-bar input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text); font-size: 15px;
+  }
+  .search-bar input::placeholder { color: var(--muted); }
+  .icon-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); display: flex; align-items: center; padding: 0;
+  }
+  .icon-btn:hover { color: var(--accent2); }
+
+  .apps-grid {
+    flex: 1; overflow-y: auto; padding: 8px 16px 20px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 12px;
+  }
+  .apps-grid::-webkit-scrollbar { width: 4px; }
+  .apps-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .app-tile {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    cursor: pointer; padding: 10px 4px; border-radius: var(--radius);
+    transition: background .15s;
+    position: relative;
+  }
+  .app-tile:hover { background: var(--surface); }
+  .app-tile:active { background: var(--card); }
+
+  .app-icon {
+    width: 60px; height: 60px; border-radius: 14px;
+    background: var(--card); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; overflow: hidden; position: relative;
+  }
+  .app-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .app-icon .fallback { font-size: 26px; }
+
+  .ua-badge {
+    position: absolute; bottom: -3px; right: -3px;
+    background: var(--accent); color: #fff; font-size: 8px; font-weight: 700;
+    border-radius: 4px; padding: 1px 4px; line-height: 14px;
+  }
+  .app-name { font-size: 12px; color: var(--text); text-align: center; line-height: 1.3; word-break: break-word; }
+
+  .fab {
+    position: absolute; bottom: 24px; right: 20px;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; cursor: pointer; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 20px rgba(108,99,255,.5);
+    font-size: 24px; transition: transform .15s;
+  }
+  .fab:hover { transform: scale(1.07); }
+  .fab:active { transform: scale(.95); }
+
+  /* ── BROWSER SCREEN ── */
+  #browserScreen { background: #000; }
+
+  .browser-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 48px 12px 10px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .url-pill {
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: 50px; padding: 8px 14px;
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    overflow: hidden;
+  }
+  .url-pill .lock { color: var(--green); font-size: 13px; flex-shrink: 0; }
+  .url-pill .url-text { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .browser-btn {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0; transition: background .12s;
+  }
+  .browser-btn:hover { background: var(--border); }
+  .browser-btn:active { background: var(--accent); color: #fff; }
+
+  .webview-wrap { flex: 1; position: relative; }
+  .webview-wrap iframe {
+    width: 100%; height: 100%; border: none; display: block;
+    background: #fff;
+  }
+  .loading-overlay {
+    position: absolute; inset: 0;
+    background: #fff; display: flex; align-items: center; justify-content: center;
+    transition: opacity .3s;
+  }
+  .loading-overlay.done { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 3px solid #eee; border-top-color: var(--accent);
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── MODAL ── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7);
+    backdrop-filter: blur(4px); z-index: 100;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .modal-backdrop.hidden { display: none; }
+  .modal {
+    background: var(--surface); border-radius: 24px 24px 0 0;
+    padding: 24px 20px 36px; width: 100%; max-width: 480px;
+    box-shadow: var(--shadow); max-height: 92vh; overflow-y: auto;
+  }
+  .modal-handle {
+    width: 36px; height: 4px; background: var(--border);
+    border-radius: 2px; margin: 0 auto 20px;
+  }
+  .modal-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 18px; }
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; display: block; }
+  .form-input {
+    width: 100%; background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; color: var(--text);
+    font-size: 15px; outline: none; font-family: inherit; transition: border-color .15s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .form-input::placeholder { color: var(--muted); }
+
+  .ua-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ua-chip {
+    padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--border);
+    background: var(--card); color: var(--text); cursor: pointer;
+    font-size: 13px; font-weight: 500; text-align: center;
+    transition: all .15s;
+  }
+  .ua-chip.active { border-color: var(--accent); background: rgba(108,99,255,.15); color: var(--accent2); }
+  .ua-chip:hover:not(.active) { border-color: var(--border); background: var(--border); }
+
+  .ua-custom-wrap { margin-top: 10px; }
+  .ua-preview {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; font-size: 11px; color: var(--muted);
+    font-family: monospace; word-break: break-all; line-height: 1.5;
+    margin-top: 8px; min-height: 48px;
+  }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+  .btn {
+    flex: 1; padding: 14px; border-radius: 12px; border: none;
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: all .15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-danger  { background: rgba(255,95,109,.15); color: var(--danger); border: 1px solid rgba(255,95,109,.3); }
+  .btn-danger:hover { background: rgba(255,95,109,.25); }
+  .btn-ghost   { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--border); }
+
+  /* ── UA INDICATOR BAR ── */
+  .ua-bar {
+    background: rgba(108,99,255,.12); border-top: 1px solid rgba(108,99,255,.25);
+    padding: 5px 16px; display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0;
+  }
+  .ua-bar-icon { font-size: 13px; }
+  .ua-bar-text { font-size: 11px; color: var(--accent2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ua-bar-edit { font-size: 11px; color: var(--accent); cursor: pointer; font-weight: 600; }
+
+  /* ── CONTEXT MENU ── */
+  .ctx-menu {
+    background: var(--surface); border-radius: 16px; border: 1px solid var(--border);
+    overflow: hidden; box-shadow: var(--shadow);
+    min-width: 220px; margin: 0 12px 12px;
+  }
+  .ctx-item {
+    padding: 14px 18px; display: flex; align-items: center; gap: 12px;
+    cursor: pointer; font-size: 15px; color: var(--text); transition: background .12s;
+  }
+  .ctx-item:hover { background: var(--card); }
+  .ctx-item.danger { color: var(--danger); }
+  .ctx-item + .ctx-item { border-top: 1px solid var(--border); }
+  .ctx-icon { font-size: 18px; width: 24px; text-align: center; }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 48px 24px; color: var(--muted); text-align: center;
+  }
+  .empty-state .icon { font-size: 48px; opacity: .4; }
+  .empty-state p { font-size: 15px; line-height: 1.6; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; padding: 10px 18px;
+    border-radius: 50px; box-shadow: var(--shadow); z-index: 200;
+    opacity: 0; transition: all .25s; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ── HOME SCREEN ── -->
+<div id="homeScreen" class="screen">
+  <div class="home-header">
+    <div class="home-title">WebShell</div>
+    <div class="home-sub">サイト一覧</div>
+  </div>
+  <div class="search-bar">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="searchInput" type="text" placeholder="URLを検索 または 直接入力..." autocomplete="off">
+    <button class="icon-btn" onclick="openUrlDirect()" title="移動">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </button>
+  </div>
+  <div class="apps-grid" id="appsGrid"></div>
+  <button class="fab" onclick="openAddModal()" title="サイトを追加">＋</button>
+</div>
+
+<!-- ── BROWSER SCREEN ── -->
+<div id="browserScreen" class="screen hidden">
+  <div class="browser-bar" id="browserBar">
+    <button class="browser-btn" onclick="goHome()" title="ホーム">🏠</button>
+    <div class="url-pill" onclick="openUrlEdit()">
+      <span class="lock">🔒</span>
+      <span class="url-text" id="urlDisplay">about:blank</span>
+    </div>
+    <button class="browser-btn" onclick="reloadFrame()" title="再読み込み">↻</button>
+    <button class="browser-btn" onclick="openSiteMenu()" title="メニュー">⋮</button>
+  </div>
+  <div class="ua-bar" id="uaBar" style="display:none">
+    <span class="ua-bar-icon" id="uaBarIcon">🖥️</span>
+    <span class="ua-bar-text" id="uaBarText">偽装なし</span>
+    <span class="ua-bar-edit" onclick="openUaModal()">変更</span>
+  </div>
+  <div class="webview-wrap">
+    <iframe id="webFrame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" loading="eager"></iframe>
+    <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ── ADD / EDIT SITE MODAL ── -->
+<div class="modal-backdrop hidden" id="addModal" onclick="closeModalIfBackdrop(event,'addModal')">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-title" id="addModalTitle">サイトを追加</div>
+  <input type="hidden" id="editingId">
+
+  <div class="form-group">
+    <label class="form-label">サイト名</label>
+    <input class="form-input" id="siteNameInput" placeholder="例: Twitter" maxlength="30">
+  </div>
+  <div class="form-group">
+    <label class="form-label">URL</label>
+    <input class="form-input" id="siteUrlInput" placeholder="https://twitter.com" type="url">
+  </div>
+  <div class="form-group">
+    <label class="form-label">アイコン（絵文字 または 画像URL）</label>
+    <input class="form-input" id="siteIconInput" placeholder="🐦 または https://...">
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">User-Agent（OS偽装）</label>
+    <div class="ua-grid" id="uaChips"></div>
+    <div class="ua-custom-wrap" id="customUaWrap" style="display:none">
+      <input class="form-input" id="customUaInput" placeholder="カスタム User-Agent 文字列" style="margin-top:8px">
+    </div>
+    <div class="ua-preview" id="uaPreview">偽装なし（デフォルト）</div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-ghost" onclick="closeModal('addModal')">キャンセル</button>
+    <button class="btn btn-danger" id="deleteBtn" onclick="deleteSite()" style="display:none">削除</button>
+    <button class="btn btn-primary" onclick="saveSite()">保存</button>
+  </div>
+</div>
+</div>
+
+<!-- ── URL EDIT MODAL ── -->
+<div class="modal-backdrop hidden" id="urlModal" onclick="closeModalIfBackdrop(event,'urlModal')">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-title">URLを変更</div>
+  <div class="form-group">
+    <label class="form-label">移動先 URL</label>
+    <input class="form-input" id="urlEditInput" placeholder="https://..." type="url">
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-ghost" onclick="closeModal('urlModal')">キャンセル</button>
+    <button class="btn btn-primary" onclick="applyUrlEdit()">移動</button>
+  </div>
+</div>
+</div>
+
+<!-- ── UA CHANGE MODAL (in-browser) ── -->
+<div class="modal-backdrop hidden" id="uaModal" onclick="closeModalIfBackdrop(event,'uaModal')">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-title">User-Agent を変更</div>
+  <div class="form-group">
+    <div class="ua-grid" id="uaChipsBrowser"></div>
+    <div class="ua-custom-wrap" id="customUaWrapBrowser" style="display:none">
+      <input class="form-input" id="customUaInputBrowser" placeholder="カスタム User-Agent 文字列" style="margin-top:8px">
+    </div>
+    <div class="ua-preview" id="uaPreviewBrowser">偽装なし</div>
+  </div>
+  <p style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.6">
+    ⚠️ UA偽装はHTTPヘッダーではなくiframeのnavigator.userAgentをオーバーライドします。完全な偽装にはネイティブアプリが必要です。
+  </p>
+  <div class="btn-row">
+    <button class="btn btn-ghost" onclick="closeModal('uaModal')">キャンセル</button>
+    <button class="btn btn-primary" onclick="applyUaBrowser()">適用 &amp; リロード</button>
+  </div>
+</div>
+</div>
+
+<!-- ── SITE CONTEXT MENU ── -->
+<div class="modal-backdrop hidden" id="siteMenu" onclick="closeModalIfBackdrop(event,'siteMenu')">
+<div class="modal" style="border-radius:24px 24px 0 0;padding:16px 0 36px">
+  <div class="modal-handle" style="margin-bottom:12px"></div>
+  <div class="ctx-menu">
+    <div class="ctx-item" onclick="toggleDesktopMode()"><span class="ctx-icon" id="desktopIcon">🖥️</span>PC版サイト</div>
+    <div class="ctx-item" onclick="openUaModal()"><span class="ctx-icon">🕵️</span>UA偽装を変更</div>
+    <div class="ctx-item" onclick="copyUrl()"><span class="ctx-icon">📋</span>URLをコピー</div>
+    <div class="ctx-item" onclick="openExternal()"><span class="ctx-icon">↗️</span>ブラウザで開く</div>
+    <div class="ctx-item" onclick="editCurrentSite()"><span class="ctx-icon">✏️</span>サイトを編集</div>
+    <div class="ctx-item danger" onclick="closeModal('siteMenu')"><span class="ctx-icon">✕</span>閉じる</div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ─── UA PRESETS ─── */
+const UA_PRESETS = [
+  { key: 'none',    label: '偽装なし',  icon: '📱', ua: '' },
+  { key: 'pc',      label: 'PC版',      icon: '🖥️', ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36' },
+  { key: 'mac',     label: 'macOS',     icon: '🍎', ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36' },
+  { key: 'iphone',  label: 'iPhone',    icon: '📱', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1' },
+  { key: 'ipad',    label: 'iPad',      icon: '📟', ua: 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1' },
+  { key: 'linux',   label: 'Linux',     icon: '🐧', ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36' },
+  { key: 'bot',     label: 'Googlebot', icon: '🤖', ua: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+  { key: 'custom',  label: 'カスタム',  icon: '⚙️', ua: '' },
+];
+
+/* ─── STATE ─── */
+let sites = JSON.parse(localStorage.getItem('webshell_sites') || '[]');
+let currentSiteId = null;
+let currentUaKey  = 'none';
+let browserUaKey  = 'none';
+let desktopMode   = false;
+
+/* ─── STORAGE ─── */
+function save() { localStorage.setItem('webshell_sites', JSON.stringify(sites)); }
+function uid()  { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+/* ─── TOAST ─── */
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ─── RENDER HOME ─── */
+function renderGrid() {
+  const q    = document.getElementById('searchInput').value.toLowerCase();
+  const grid = document.getElementById('appsGrid');
+  const list = q ? sites.filter(s => s.name.toLowerCase().includes(q) || s.url.toLowerCase().includes(q)) : sites;
+
+  if (!list.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="icon">🌐</div>
+      <p>${q ? '一致するサイトがありません' : '＋ボタンでサイトを追加してください'}</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(s => {
+    const badge = s.uaKey && s.uaKey !== 'none'
+      ? `<div class="ua-badge">${(UA_PRESETS.find(p=>p.key===s.uaKey)||{icon:'?'}).icon}</div>` : '';
+    const iconHtml = s.icon && s.icon.startsWith('http')
+      ? `<img src="${escHtml(s.icon)}" onerror="this.outerHTML='<span class=fallback>🌐</span>'">`
+      : `<span class="fallback">${escHtml(s.icon || '🌐')}</span>`;
+    return `<div class="app-tile" onclick="launchSite('${s.id}')" oncontextmenu="longPress(event,'${s.id}')">
+      <div class="app-icon">${iconHtml}${badge}</div>
+      <div class="app-name">${escHtml(s.name)}</div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('searchInput').addEventListener('input', renderGrid);
+
+/* ─── LAUNCH SITE ─── */
+function launchSite(id) {
+  const site = sites.find(s => s.id === id);
+  if (!site) return;
+  currentSiteId = id;
+  browserUaKey  = site.uaKey || 'none';
+  desktopMode   = false;
+
+  document.getElementById('homeScreen').classList.add('hidden');
+  document.getElementById('browserScreen').classList.remove('hidden');
+  loadUrl(site.url);
+}
+
+function loadUrl(url) {
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  document.getElementById('urlDisplay').textContent = url;
+  document.getElementById('urlEditInput').value     = url;
+
+  const frame  = document.getElementById('webFrame');
+  const loader = document.getElementById('loadingOverlay');
+  loader.classList.remove('done');
+  frame.onload = () => loader.classList.add('done');
+  frame.src    = url;
+
+  applyUaToFrame();
+  updateUaBar();
+}
+
+/* ─── UA INJECTION ─── */
+function getUaString(key, customVal) {
+  if (key === 'custom') return customVal || '';
+  return (UA_PRESETS.find(p => p.key === key) || { ua: '' }).ua;
+}
+
+function applyUaToFrame() {
+  const frame  = document.getElementById('webFrame');
+  const uaStr  = getUaString(browserUaKey, document.getElementById('customUaInputBrowser').value);
+  if (!uaStr) return;
+  try {
+    frame.contentWindow.eval(`
+      Object.defineProperty(navigator, 'userAgent', {
+        get: () => ${JSON.stringify(uaStr)},
+        configurable: true
+      });
+    `);
+  } catch(e) { /* cross-origin制限 */ }
+}
+
+function updateUaBar() {
+  const bar  = document.getElementById('uaBar');
+  const icon = document.getElementById('uaBarIcon');
+  const txt  = document.getElementById('uaBarText');
+  const site = sites.find(s => s.id === currentSiteId);
+  const preset = UA_PRESETS.find(p => p.key === browserUaKey) || UA_PRESETS[0];
+
+  if (browserUaKey === 'none' && !desktopMode) {
+    bar.style.display = 'none'; return;
+  }
+  bar.style.display = 'flex';
+  icon.textContent  = desktopMode ? '🖥️' : preset.icon;
+  const uaStr       = desktopMode
+    ? 'PC版モード (viewport偽装)'
+    : (getUaString(browserUaKey, document.getElementById('customUaInputBrowser').value) || preset.label);
+  txt.textContent = uaStr;
+}
+
+/* ─── DESKTOP MODE ─── */
+function toggleDesktopMode() {
+  desktopMode = !desktopMode;
+  const frame = document.getElementById('webFrame');
+  document.getElementById('desktopIcon').textContent = desktopMode ? '📱' : '🖥️';
+  closeModal('siteMenu');
+
+  // PC版: viewport幅を1280に偽装
+  try {
+    if (desktopMode) {
+      frame.contentWindow.eval(`
+        Object.defineProperty(screen, 'width', { get: () => 1280, configurable: true });
+        Object.defineProperty(window, 'innerWidth', { get: () => 1280, configurable: true });
+        document.querySelector('meta[name="viewport"]') &&
+          (document.querySelector('meta[name="viewport"]').content = 'width=1280');
+      `);
+    }
+  } catch(e) {}
+
+  updateUaBar();
+  reloadFrame();
+  showToast(desktopMode ? 'PC版モード ON' : 'モバイルモードに戻しました');
+}
+
+/* ─── BROWSER CONTROLS ─── */
+function goHome() {
+  document.getElementById('browserScreen').classList.add('hidden');
+  document.getElementById('homeScreen').classList.remove('hidden');
+  document.getElementById('webFrame').src = 'about:blank';
+  currentSiteId = null;
+}
+
+function reloadFrame() {
+  const f = document.getElementById('webFrame');
+  const s = f.src;
+  document.getElementById('loadingOverlay').classList.remove('done');
+  f.src = '';
+  setTimeout(() => { f.src = s; applyUaToFrame(); }, 50);
+}
+
+function openUrlDirect() {
+  const v = document.getElementById('searchInput').value.trim();
+  if (!v) return;
+  const url = /^https?:\/\//i.test(v) ? v : 'https://' + v;
+  currentSiteId = null;
+  browserUaKey  = 'none';
+  desktopMode   = false;
+  document.getElementById('homeScreen').classList.add('hidden');
+  document.getElementById('browserScreen').classList.remove('hidden');
+  loadUrl(url);
+}
+
+function openUrlEdit()  { openModal('urlModal'); }
+function applyUrlEdit() {
+  const v = document.getElementById('urlEditInput').value.trim();
+  if (v) { loadUrl(v); closeModal('urlModal'); }
+}
+
+function copyUrl() {
+  const url = document.getElementById('urlDisplay').textContent;
+  navigator.clipboard?.writeText(url).then(() => showToast('URLをコピーしました')).catch(()=>{});
+  closeModal('siteMenu');
+}
+
+function openExternal() {
+  const url = document.getElementById('urlDisplay').textContent;
+  window.open(url, '_blank', 'noopener');
+  closeModal('siteMenu');
+}
+
+function editCurrentSite() {
+  closeModal('siteMenu');
+  if (currentSiteId) openEditModal(currentSiteId);
+}
+
+function openSiteMenu() { openModal('siteMenu'); }
+
+/* ─── UA MODAL (browser) ─── */
+function openUaModal() {
+  closeModal('siteMenu');
+  renderUaChips('uaChipsBrowser', 'customUaWrapBrowser', 'uaPreviewBrowser', browserUaKey);
+  openModal('uaModal');
+}
+
+function applyUaBrowser() {
+  const ua = getUaString(browserUaKey, document.getElementById('customUaInputBrowser').value);
+  updateUaBar();
+  closeModal('uaModal');
+  reloadFrame();
+  showToast(ua ? `UA偽装: ${UA_PRESETS.find(p=>p.key===browserUaKey)?.label || 'カスタム'}` : 'UA偽装を解除しました');
+}
+
+/* ─── UA CHIPS RENDER ─── */
+function renderUaChips(gridId, wrapId, previewId, activeKey) {
+  const grid = document.getElementById(gridId);
+  grid.innerHTML = UA_PRESETS.map(p =>
+    `<button class="ua-chip${p.key === activeKey ? ' active' : ''}"
+      onclick="selectUaChip('${gridId}','${wrapId}','${previewId}','${p.key}')">
+      ${p.icon} ${p.label}
+    </button>`
+  ).join('');
+  updateUaPreview(previewId, activeKey, '');
+}
+
+function selectUaChip(gridId, wrapId, previewId, key) {
+  // update active
+  document.getElementById(gridId).querySelectorAll('.ua-chip').forEach(c => c.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById(wrapId).style.display = key === 'custom' ? 'block' : 'none';
+
+  if (gridId === 'uaChips')        currentUaKey  = key;
+  else                              browserUaKey  = key;
+  updateUaPreview(previewId, key, document.getElementById(wrapId.replace('Wrap','Input'))?.value || '');
+}
+
+function updateUaPreview(previewId, key, custom) {
+  const ua = key === 'custom' ? custom : (UA_PRESETS.find(p=>p.key===key)?.ua || '');
+  document.getElementById(previewId).textContent = ua || '偽装なし（デフォルトUA）';
+}
+
+/* ─── ADD / EDIT MODAL ─── */
+function openAddModal() {
+  currentUaKey = 'none';
+  document.getElementById('addModalTitle').textContent = 'サイトを追加';
+  document.getElementById('editingId').value    = '';
+  document.getElementById('siteNameInput').value = '';
+  document.getElementById('siteUrlInput').value  = '';
+  document.getElementById('siteIconInput').value = '';
+  document.getElementById('deleteBtn').style.display = 'none';
+  renderUaChips('uaChips', 'customUaWrap', 'uaPreview', 'none');
+  openModal('addModal');
+}
+
+function openEditModal(id) {
+  const site = sites.find(s => s.id === id);
+  if (!site) return;
+  currentUaKey = site.uaKey || 'none';
+  document.getElementById('addModalTitle').textContent = 'サイトを編集';
+  document.getElementById('editingId').value    = id;
+  document.getElementById('siteNameInput').value = site.name;
+  document.getElementById('siteUrlInput').value  = site.url;
+  document.getElementById('siteIconInput').value = site.icon || '';
+  document.getElementById('deleteBtn').style.display = '';
+  renderUaChips('uaChips', 'customUaWrap', 'uaPreview', currentUaKey);
+  if (site.uaKey === 'custom') document.getElementById('customUaInput').value = site.customUa || '';
+  openModal('addModal');
+}
+
+function saveSite() {
+  const name = document.getElementById('siteNameInput').value.trim();
+  const url  = document.getElementById('siteUrlInput').value.trim();
+  if (!name || !url) { showToast('名前とURLは必須です'); return; }
+
+  const id   = document.getElementById('editingId').value;
+  const icon = document.getElementById('siteIconInput').value.trim();
+  const customUa = document.getElementById('customUaInput').value.trim();
+
+  if (id) {
+    const i = sites.findIndex(s => s.id === id);
+    if (i >= 0) sites[i] = { ...sites[i], name, url, icon, uaKey: currentUaKey, customUa };
+  } else {
+    sites.push({ id: uid(), name, url, icon, uaKey: currentUaKey, customUa });
+  }
+  save(); renderGrid(); closeModal('addModal');
+  showToast(id ? 'サイトを更新しました' : 'サイトを追加しました');
+}
+
+function deleteSite() {
+  const id = document.getElementById('editingId').value;
+  if (!id) return;
+  sites = sites.filter(s => s.id !== id);
+  save(); renderGrid(); closeModal('addModal');
+  showToast('サイトを削除しました');
+}
+
+/* ─── LONG PRESS (right click) ─── */
+function longPress(e, id) {
+  e.preventDefault();
+  openEditModal(id);
+}
+
+/* ─── MODAL HELPERS ─── */
+function openModal(id)  { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function closeModalIfBackdrop(e, id) { if (e.target.id === id) closeModal(id); }
+
+/* ─── CUSTOM INPUT EVENTS ─── */
+document.getElementById('customUaInput').addEventListener('input', e =>
+  updateUaPreview('uaPreview', 'custom', e.target.value));
+document.getElementById('customUaInputBrowser').addEventListener('input', e =>
+  updateUaPreview('uaPreviewBrowser', 'custom', e.target.value));
+
+/* ─── ESC KEY ─── */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    ['addModal','urlModal','uaModal','siteMenu'].forEach(id => {
+      if (!document.getElementById(id).classList.contains('hidden')) closeModal(id);
+    });
+  }
+});
+
+/* ─── IFRAME KEYBOARD NAVIGATION ─── */
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') openUrlDirect();
+});
+document.getElementById('urlEditInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') applyUrlEdit();
+});
+
+/* ─── UTILITIES ─── */
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ─── SAMPLE SITES (first run) ─── */
+if (!sites.length) {
+  sites = [
+    { id: uid(), name: 'Google',    url: 'https://www.google.com',    icon: '🔍', uaKey: 'none', customUa: '' },
+    { id: uid(), name: 'Wikipedia', url: 'https://ja.wikipedia.org',  icon: '📖', uaKey: 'none', customUa: '' },
+    { id: uid(), name: 'YouTube',   url: 'https://m.youtube.com',     icon: '▶️', uaKey: 'none', customUa: '' },
+    { id: uid(), name: 'GitHub',    url: 'https://github.com',        icon: '🐙', uaKey: 'pc',   customUa: '' },
+  ];
+  save();
+}
+
+renderGrid();
+</script>
+</body>
+</html>
